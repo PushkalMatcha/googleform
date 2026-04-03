@@ -418,8 +418,8 @@
 
     <div class="input-section" id="inputSection">
       <div class="input-group">
-        <label for="apiKey">Grok API Key (Required)</label>
-        <input type="password" id="apiKey" placeholder="xoxb-...">
+        <label for="apiKey">Groq API Key (Required)</label>
+        <input type="password" id="apiKey" placeholder="gsk_...">
       </div>
       <div class="input-group">
         <label for="formUrl">Google Form URL</label>
@@ -436,7 +436,7 @@
       <div class="step-labels">
         <div class="step active" id="step1">&gt; Fetching form...</div>
         <div class="step" id="step2">&gt; Parsing questions...</div>
-        <div class="step" id="step3">&gt; Generating answers via Grok...</div>
+        <div class="step" id="step3">&gt; Generating answers via Groq...</div>
       </div>
     </div>
 
@@ -464,7 +464,7 @@
         <div class="step-card">
           <div class="step-num">03</div>
           <h3>Auto-Answer</h3>
-          <p>Grok AI generates thoughtful answers for each field.</p>
+          <p>Groq AI generates thoughtful answers for each field.</p>
         </div>
       </div>
     </div>
@@ -499,7 +499,7 @@
     const apiCountDisplay = document.getElementById('apiCountDisplay');
 
     // Load saved data
-    const savedKey = localStorage.getItem('grokApiKey');
+    const savedKey = localStorage.getItem('groqApiKey');
     if (savedKey) apiKeyInput.value = savedKey;
 
     let apiCallCount = parseInt(localStorage.getItem('apiCallCount') || '0', 10);
@@ -531,7 +531,7 @@
       const url = document.getElementById('formUrl').value.trim();
       const apiKey = apiKeyInput.value.trim();
 
-      if (!apiKey) return showError('Please enter your Grok API Key.');
+      if (!apiKey) return showError('Please enter your Groq API Key.');
       if (!url || !url.startsWith('https://docs.google.com/forms')) return showError('Please enter a valid Google Forms URL.');
 
       // UI prep
@@ -612,14 +612,14 @@ Do NOT wrap the JSON in Markdown backticks. Provide raw JSON only.
 Questions:
 ${JSON.stringify(extractedData, null, 2)}`;
 
-        const grokResponse = await fetch('https://api.x.ai/v1/chat/completions', {
+        const grokResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${apiKey}`
           },
           body: JSON.stringify({
-            model: 'grok-2-latest',
+            model: 'llama-3.3-70b-versatile',
             messages: [
               { role: 'system', content: 'You only output valid JSON arrays.' },
               { role: 'user', content: prompt }
@@ -664,7 +664,7 @@ ${JSON.stringify(extractedData, null, 2)}`;
         }
 
         // Update successful call details
-        localStorage.setItem('grokApiKey', apiKey);
+        localStorage.setItem('groqApiKey', apiKey);
         apiCallCount++;
         localStorage.setItem('apiCallCount', apiCallCount);
         apiCountDisplay.textContent = apiCallCount;
