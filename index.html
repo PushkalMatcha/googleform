@@ -314,6 +314,33 @@
       margin-top: 8px;
     }
 
+    .options-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .option-item {
+      padding: 10px 14px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 6px;
+      font-size: 0.95rem;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .option-item.selected {
+      border-color: var(--cyan);
+      background: rgba(0, 255, 231, 0.1);
+      color: var(--cyan);
+      font-weight: 600;
+    }
+
+    .indicator {
+      font-size: 0.8rem;
+    }
+
     .answer {
       color: var(--cyan);
       background: rgba(0, 255, 231, 0.05);
@@ -611,12 +638,22 @@ ${JSON.stringify(extractedData, null, 2)}`;
         
         // Clean up markdown block if API ignores instructions
         let cleanJson = contentStr;
-        if (cleanJson.startsWith('```json')) cleanJson = cleanJson.slice(7);
-        if (cleanJson.startsWith('```')) cleanJson = cleanJson.slice(3);
-        if (cleanJson.endsWith('```')) cleanJson = cleanJson.slice(0, -3);
-        cleanJson = cleanJson.trim();
+        const startIdx = cleanJson.indexOf('[');
+        const endIdx = cleanJson.lastIndexOf(']');
+        if (startIdx !== -1 && endIdx !== -1) {
+          cleanJson = cleanJson.substring(startIdx, endIdx + 1);
+        }
+        
+        try {
+          aiAnswersData = JSON.parse(cleanJson);
+        } catch(e) {
+          throw new Error('Failed to parse AI response as JSON.');
+        }
 
-        aiAnswersData = JSON.parse(cleanJson);
+        // Handle if grok wraps in { answers: [] } accidentally
+        if (!Array.isArray(aiAnswersData) && Array.isArray(aiAnswersData.answers)) {
+            aiAnswersData = aiAnswersData.answers;
+        }
 
         // Update successful call details
         localStorage.setItem('grokApiKey', apiKey);
@@ -628,15 +665,28 @@ ${JSON.stringify(extractedData, null, 2)}`;
         loadingUI.style.display = 'none';
         
         extractedData.forEach(q => {
-          const aiAns = aiAnswersData.find(a => a.questionIndex === q.questionIndex);
+          const aiAns = aiAnswersData.find(a => String(a.questionIndex) === String(q.questionIndex) || a.questionText === q.questionText);
           const answerText = aiAns ? aiAns.selectedAnswer : 'No answer generated.';
+
+          let optionsHtml = '';
+          if (q.options && q.options.length > 0) {
+            optionsHtml = '<div class="options-list">';
+            q.options.forEach(opt => {
+              const checked = answerText && answerText.toLowerCase().includes(opt.toLowerCase().trim());
+              optionsHtml += `<div class="option-item ${checked ? 'selected' : ''}">
+                <span class="indicator">${checked ? '●' : '○'}</span> ${opt}
+              </div>`;
+            });
+            optionsHtml += '</div>';
+          }
 
           const card = document.createElement('div');
           card.className = 'result-card';
           card.innerHTML = `
             <div class="q-type-badge">${q.questionType}</div>
             <div class="question">${q.questionIndex}. ${q.questionText}</div>
-            <div class="answer">${answerText}</div>
+            ${optionsHtml}
+            <div class="answer"><b>AI Output:</b> ${answerText}</div>
           `;
           resultsUI.appendChild(card);
         });
