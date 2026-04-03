@@ -629,8 +629,16 @@ ${JSON.stringify(extractedData, null, 2)}`;
         });
 
         if (!grokResponse.ok) {
-          const errData = await grokResponse.json();
-          throw new Error(`API Error: ${errData.error?.message || 'Failed to communicate with Grok API.'}`);
+          let errText = await grokResponse.text();
+          let parsedError = undefined;
+          try { parsedError = JSON.parse(errText); } catch(e) {}
+          
+          let errMsg = parsedError?.error?.message 
+                    || parsedError?.message 
+                    || errText
+                    || 'Unknown server error';
+
+          throw new Error(`API Error (${grokResponse.status}): ${errMsg}`);
         }
 
         const grokData = await grokResponse.json();
