@@ -560,43 +560,97 @@
         const parser = new DOMParser();
         const doc = parser.parseFromString(data.contents, 'text/html');
         
-        // Google Forms structure hack: items are usually in div[role="listitem"]
-        const listItems = doc.querySelectorAll('div[role="listitem"]');
         extractedData = [];
 
-        listItems.forEach((item, index) => {
-          // Question text usually in role="heading"
-          const headingEl = item.querySelector('div[role="heading"]');
-          if (!headingEl) return;
-          
-          let questionText = headingEl.innerText.trim();
-          let questionType = 'Text/Unknown';
-          
-          // Try to guess type based on elements present
-          if (item.querySelector('input[type="radio"]')) questionType = 'Multiple Choice';
-          else if (item.querySelector('input[type="checkbox"]')) questionType = 'Checkbox';
-          else if (item.querySelector('div[role="listbox"]')) questionType = 'Dropdown';
-          else if (item.querySelector('textarea')) questionType = 'Paragraph';
-          else if (item.querySelector('input[type="text"]')) questionType = 'Short Answer';
-          
-          // Extract available options if multiple choice or checkbox
-          let options = [];
-          const optionLabels = item.querySelectorAll('span'); // very broad heuristic for labels in google forms
-          if (['Multiple Choice', 'Checkbox'].includes(questionType)) {
-             // More specific: usually wrap text near radios/checkboxes
-             const wrappers = item.querySelectorAll('label');
-             wrappers.forEach(w => {
-               if(w.innerText.trim()) options.push(w.innerText.trim());
-             });
+        // Attempt 1: Extract from internal JSON blueprint (This grabs ALL sections natively!)
+        let formsJsonStr = null;
+        const scriptTags = Array.from(doc.querySelectorAll('script'));
+        for (let s of scriptTags) {
+          if (s.textContent && s.textContent.includes('FB_PUBLIC_LOAD_DATA_')) {
+            const match = s.textContent.match(/var FB_PUBLIC_LOAD_DATA_ = (\[.*?\]);/s);
+            if (match) formsJsonStr = match[1];
+            break;
           }
+        }
 
-          extractedData.push({
-            questionIndex: index + 1,
-            questionText,
-            questionType,
-            options: options.length > 0 ? options : null
+        if (formsJsonStr) {
+          try {
+            const formData = JSON.parse(formsJsonStr);
+            const items = formData[1][1];
+            
+            items.forEach((item) => {
+              const qText = item[1];
+              const qTypeInt = item[3];
+              // 8 = Section Header, 11 = Image/Video, etc. Skip layout items.
+              if (qTypeInt === 8 || qTypeInt === 11 || !qText) return; 
+
+              let qType = 'Unknown';
+              let options = [];
+              
+              if (qTypeInt === 0) qType = 'Short Answer';
+              else if (qTypeInt === 1) qType = 'Paragraph';
+              else if (qTypeInt === 2) qType = 'Multiple Choice';
+              else if (qTypeInt === 3) qType = 'Dropdown';
+              else if (qTypeInt === 4) qType = 'Checkbox';
+              else if (qTypeInt === 5) qType = 'Linear Scale';
+              else if (qTypeInt === 7) qType = 'Grid';
+              else if (qTypeInt === 9) qType = 'Date';
+              else if (qTypeInt === 10) qType = 'Time';
+
+              // Extract options for choice-based questions
+              if ([2, 3, 4].includes(qTypeInt) && item[4] && item[4][0] && item[4][0][1]) {
+                 item[4][0][1].forEach(opt => {
+                   if (opt[0] !== undefined && opt[0] !== null && opt[0] !== '') {
+                     options.push(String(opt[0]));
+                   }
+                 });
+              }
+
+              extractedData.push({
+                questionIndex: extractedData.length + 1,
+                questionText: qText,
+                questionType: qType,
+                options: options.length > 0 ? options : null
+              });
+            });
+          } catch(e) {
+            console.warn('Failed to parse internal JSON.', e);
+            extractedData = []; // clear and fallback
+          }
+        }
+
+        // Attempt 2: DOM parsing Fallback if JSON fails or array was empty
+        if (extractedData.length === 0) {
+          const listItems = doc.querySelectorAll('div[role="listitem"]');
+          listItems.forEach((item, index) => {
+            const headingEl = item.querySelector('div[role="heading"]');
+            if (!headingEl) return;
+            
+            let questionText = headingEl.innerText.trim();
+            let questionType = 'Text/Unknown';
+            
+            if (item.querySelector('input[type="radio"]')) questionType = 'Multiple Choice';
+            else if (item.querySelector('input[type="checkbox"]')) questionType = 'Checkbox';
+            else if (item.querySelector('div[role="listbox"]')) questionType = 'Dropdown';
+            else if (item.querySelector('textarea')) questionType = 'Paragraph';
+            else if (item.querySelector('input[type="text"]')) questionType = 'Short Answer';
+            
+            let options = [];
+            if (['Multiple Choice', 'Checkbox'].includes(questionType)) {
+               const wrappers = item.querySelectorAll('label');
+               wrappers.forEach(w => {
+                 if(w.innerText.trim()) options.push(w.innerText.trim());
+               });
+            }
+
+            extractedData.push({
+              questionIndex: extractedData.length + 1,
+              questionText,
+              questionType,
+              options: options.length > 0 ? options : null
+            });
           });
-        });
+        }
 
         if (extractedData.length === 0) {
           throw new Error('Could not find any questions. Form might be private or have an unsupported structure.');
